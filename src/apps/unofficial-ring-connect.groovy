@@ -193,6 +193,8 @@ def mainPage() {
       paragraph('<b style="font-size: 22px;">Reset Compromised OAuth Access Token</b>')
       paragraph('<b style="color: red;">Do not toggle this button without understanding the following.</b> Resetting this token will require you to manually update <b>ALL</b> of the URLs in any existing dashboard tile any IFTTT applet. There is no need to reset the token unless it was compromised.')
       input name: "tokenReset", type: "bool", title: "Toggle this to reset your app's OAuth token", defaultValue: false, submitOnChange: true
+      paragraph('Enabling this will <b>DELAY</b> motion event notifications until a snapshot is available from the triggering device.')
+      input name: "delayMotion", type: "bool", title: "Delay motion events until snapshot ready", defaultValue: false, submitOnChange: true
     }
 
     donationPageSection()
@@ -483,7 +485,19 @@ void processIFTTT() {
   }
 
   if (kind == "motion") {
-    d.handleMotion(json)
+    if (delayMotion) {      
+      logDebug "Delaying motion for ${json.id} until snapshot is ready json ${json} type ${json.class}"
+      
+      final Integer deviceId = getRingDeviceId(json.id).toInteger()
+      state.pendingMotion = state.pendingMotion ?: [:]
+      state.pendingMotion[deviceId] = json   // store the event payload
+
+      // Request snapshot immediately
+      apiRequestSnapshotTimestamps([deviceId])
+    } else {
+      logDebug "Immediate motion trigger for ${json.id}"
+      d.handleMotion(json)
+    }
   } else if (kind == "ding") {
     d.handleDing(json)
   } else {
@@ -1278,6 +1292,16 @@ void apiRequestSnapshotImages(final Map data) {
           byte[] retval = new byte[resp.data.available()]
           resp.data.read(retval)
           state.snapshots[getFormattedDNI(localDoorbotId)] = retval
+          final String idString = doorbotId.toString()
+          def pending = state.pendingMotion?.get(idString)
+          if (pending) {            
+            logDebug "Releasing delayed motion event for ${doorbotId} pending ${pending} type ${pending.class}"
+            state.pendingMotion.remove(idString)
+            ChildDeviceWrapper d = getChildDeviceInternal(pending.id)
+            d.handleMotion(pending)
+          } else {
+            logDebug "No pending event for ${doorbotId}"
+          }
         }
       }
     }
