@@ -628,7 +628,7 @@ def uninstalled() {
 }
 
 void setupDingables() {
-  state.dingables = getChildDevices()?.findAll { RINGABLES.contains(it.getDataValue("kind")) }?.collect { getRingDeviceId(it.deviceNetworkId) }
+  state.dingables = getChildDevices()?.findAll { DINGABLES.contains(it.getDataValue("kind")) }?.collect { getRingDeviceId(it.deviceNetworkId) }
 }
 
 void configureDingPolling() {
